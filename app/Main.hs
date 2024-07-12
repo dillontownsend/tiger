@@ -1,4 +1,7 @@
 module Main where
 
+import Lexer.Lexer (lexInput)
+
 main :: IO ()
-main = putStrLn "Hello, Haskell!"
+main = do
+  print $ lexInput "= | & - + . ] [ } { ) ( ; , : := > >= < <> <= 100 dillon"
