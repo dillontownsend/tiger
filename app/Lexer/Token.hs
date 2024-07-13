@@ -43,7 +43,7 @@ data Token
   | THEN
   | IF
   | ARRAY
-  | -- dynamic values
+  | -- dynamic tokens
     STRING String
   | INT Int
   | ID String

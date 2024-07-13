@@ -1,2 +1,1 @@
-let negate_dillon_age/* this is a comment */:= -23 + "hello";
-
+let dillon := "hello \n \t \" world";
