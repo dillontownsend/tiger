@@ -1,9 +1,9 @@
 module Main where
 
-import Lexer.Lexer (lexInput)
+import Lexer.Lexer (runLexer)
 
 main :: IO ()
 main = do
   input <- readFile "app/test.tig"
   putStrLn input
-  print $ lexInput input
+  print $ runLexer input
