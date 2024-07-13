@@ -28,7 +28,7 @@ data Token
   | -- keywords
     TYPE
   | VAR
-  | FUNCTIOn
+  | FUNCTION
   | BREAK
   | OF
   | END
