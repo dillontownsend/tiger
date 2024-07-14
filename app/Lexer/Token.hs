@@ -1,5 +1,7 @@
 module Lexer.Token (Token (..), AbsolutePosition) where
 
+import qualified Data.Text as T (Text)
+
 type AbsolutePosition = Int
 
 data Token
@@ -46,8 +48,8 @@ data Token
   | IF AbsolutePosition AbsolutePosition
   | ARRAY AbsolutePosition AbsolutePosition
   | -- dynamic tokens
-    STRING String AbsolutePosition AbsolutePosition
+    STRING T.Text AbsolutePosition AbsolutePosition
   | INT Int AbsolutePosition AbsolutePosition
-  | ID String AbsolutePosition AbsolutePosition
+  | ID T.Text AbsolutePosition AbsolutePosition
   | EOF AbsolutePosition AbsolutePosition
   deriving (Eq, Show)

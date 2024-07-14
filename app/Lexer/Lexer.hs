@@ -1,3 +1,7 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
+
 module Lexer.Lexer (runLexer) where
 
 import Control.Applicative (liftA2)
@@ -5,6 +9,7 @@ import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.Except (ExceptT (..), runExceptT)
 import Control.Monad.State (State, evalState, get, gets, modify)
 import Data.Char (isAlpha, isDigit)
+import qualified Data.Text as T (Text, cons, tail, uncons, unpack)
 import Lexer.Token (AbsolutePosition, Token (..))
 import Prelude hiding (EQ, GT, LT)
 
@@ -15,7 +20,7 @@ type ColumnNumber = Int
 type LocalLength = Int
 
 data LexerState = LexerState
-  { input :: String,
+  { input :: T.Text,
     lineNumber :: LineNumber,
     columnNumber :: ColumnNumber,
     absolutePosition :: AbsolutePosition,
@@ -37,43 +42,50 @@ instance Show LexicalError where
 
 type Lexer = ExceptT LexicalError (State LexerState)
 
--- TODO: Data.Text
+pattern (:>) :: Char -> T.Text -> T.Text
+pattern c :> t <- (T.uncons -> Just (c, t))
+
+pattern Empty :: T.Text
+pattern Empty <- (T.uncons -> Nothing)
+
+readT :: (Read a) => T.Text -> a
+readT = read . T.unpack
 
 nextToken :: Lexer Token
 nextToken = do
   skipWhitespace
   inp <- gets input
   case inp of
-    "" -> makeToken EOF
-    '=' : _ -> advance1 >> makeToken EQ
-    '|' : _ -> advance1 >> makeToken OR
-    '&' : _ -> advance1 >> makeToken AND
-    '/' : '*' : _ -> advanceN 2 >> skipComment >> nextToken
-    '/' : _ -> advance1 >> makeToken DIVIDE
-    '*' : _ -> advance1 >> makeToken TIMES
-    '-' : _ -> advance1 >> makeToken MINUS
-    '+' : _ -> advance1 >> makeToken PLUS
-    '.' : _ -> advance1 >> makeToken DOT
-    ']' : _ -> advance1 >> makeToken RBRACE
-    '[' : _ -> advance1 >> makeToken LBRACE
-    '}' : _ -> advance1 >> makeToken RBRACK
-    '{' : _ -> advance1 >> makeToken LBRACK
-    ')' : _ -> advance1 >> makeToken RPAREN
-    '(' : _ -> advance1 >> makeToken LPAREN
-    ';' : _ -> advance1 >> makeToken SEMICOLON
-    ',' : _ -> advance1 >> makeToken COMMA
-    '"' : _ -> advance1 >> lexString >>= makeToken . STRING
-    ':' : '=' : _ -> advanceN 2 >> makeToken ASSIGN
-    ':' : _ -> advance1 >> makeToken COLON
-    '>' : '=' : _ -> advanceN 2 >> makeToken GE
-    '>' : _ -> advance1 >> makeToken GT
-    '<' : '>' : _ -> advanceN 2 >> makeToken NEQ
-    '<' : '=' : _ -> advanceN 2 >> makeToken LE
-    '<' : _ -> advance1 >> makeToken LT
-    c : _
-      | isDigit c -> advanceWhile isDigit >>= makeToken . INT . read
+    Empty -> makeToken EOF
+    '=' :> _ -> advance1 >> makeToken EQ
+    '|' :> _ -> advance1 >> makeToken OR
+    '&' :> _ -> advance1 >> makeToken AND
+    '/' :> ('*' :> _) -> advanceN 2 >> skipComment >> nextToken
+    '/' :> _ -> advance1 >> makeToken DIVIDE
+    '*' :> _ -> advance1 >> makeToken TIMES
+    '-' :> _ -> advance1 >> makeToken MINUS
+    '+' :> _ -> advance1 >> makeToken PLUS
+    '.' :> _ -> advance1 >> makeToken DOT
+    ']' :> _ -> advance1 >> makeToken RBRACE
+    '[' :> _ -> advance1 >> makeToken LBRACE
+    '}' :> _ -> advance1 >> makeToken RBRACK
+    '{' :> _ -> advance1 >> makeToken LBRACK
+    ')' :> _ -> advance1 >> makeToken RPAREN
+    '(' :> _ -> advance1 >> makeToken LPAREN
+    ';' :> _ -> advance1 >> makeToken SEMICOLON
+    ',' :> _ -> advance1 >> makeToken COMMA
+    '"' :> _ -> advance1 >> lexString >>= makeToken . STRING
+    ':' :> ('=' :> _) -> advanceN 2 >> makeToken ASSIGN
+    ':' :> _ -> advance1 >> makeToken COLON
+    '>' :> ('=' :> _) -> advanceN 2 >> makeToken GE
+    '>' :> _ -> advance1 >> makeToken GT
+    '<' :> ('>' :> _) -> advanceN 2 >> makeToken NEQ
+    '<' :> ('=' :> _) -> advanceN 2 >> makeToken LE
+    '<' :> _ -> advance1 >> makeToken LT
+    c :> _
+      | isDigit c -> advanceWhile isDigit >>= makeToken . INT . readT
       | isAlpha c -> lexWord
-    illegalToken : _ -> throwLexicalError $ IllegalToken illegalToken
+    illegalToken :> _ -> throwLexicalError $ IllegalToken illegalToken
 
 lexWord :: Lexer Token
 lexWord = do
@@ -100,29 +112,29 @@ lexWord = do
         _ -> ID word
     )
 
-lexString :: Lexer String
+lexString :: Lexer T.Text
 lexString = do
   inp <- gets input
   case inp of
-    [] -> throwLexicalError UnclosedString
-    '\\' : 'n' : _ -> recurseEscapeChar '\n'
-    '\\' : 't' : _ -> recurseEscapeChar '\t'
-    '\\' : '"' : _ -> recurseEscapeChar '\"'
-    '\\' : '\\' : _ -> recurseEscapeChar '\\'
-    '"' : _ -> advance1 >> pure ""
-    _ -> (head inp :) <$> (advance1 >> lexString)
+    Empty -> throwLexicalError UnclosedString
+    '\\' :> ('n' :> _) -> recurseEscapeChar '\n'
+    '\\' :> ('t' :> _) -> recurseEscapeChar '\t'
+    '\\' :> ('"' :> _) -> recurseEscapeChar '\"'
+    '\\' :> ('\\' :> _) -> recurseEscapeChar '\\'
+    '"' :> _ -> advance1 >> pure ""
+    c :> _ -> T.cons c <$> (advance1 >> lexString)
   where
-    recurseEscapeChar :: Char -> Lexer String
-    recurseEscapeChar = flip fmap (advanceN 2 >> lexString) . (:)
+    recurseEscapeChar :: Char -> Lexer T.Text
+    recurseEscapeChar = flip fmap (advanceN 2 >> lexString) . T.cons
 
-advanceWhile :: (Char -> Bool) -> Lexer String
+advanceWhile :: (Char -> Bool) -> Lexer T.Text
 advanceWhile predicate = do
   inp <- gets input
   case inp of
-    "" -> pure ""
-    c : _
+    Empty -> pure ""
+    c :> _
       | not $ predicate c -> pure ""
-      | otherwise -> (c :) <$> (advance1 >> advanceWhile predicate)
+      | otherwise -> T.cons c <$> (advance1 >> advanceWhile predicate)
 
 isLetter :: Char -> Bool
 isLetter '_' = True
@@ -134,18 +146,18 @@ skipComment :: Lexer ()
 skipComment = do
   inp <- gets input
   case inp of
-    [] -> throwLexicalError UnclosedComment
-    '*' : '/' : _ -> advanceN 2 >> resetLocalLength
+    Empty -> throwLexicalError UnclosedComment
+    '*' :> ('/' :> _) -> advanceN 2 >> resetLocalLength
     _ -> advance1 >> skipComment
 
 skipWhitespace :: Lexer ()
 skipWhitespace = do
   inp <- gets input
   case inp of
-    [] -> resetLocalLength
-    ' ' : _ -> skip
-    '\n' : _ -> skip
-    '\t' : _ -> skip
+    Empty -> resetLocalLength
+    ' ' :> _ -> skip
+    '\n' :> _ -> skip
+    '\t' :> _ -> skip
     _ -> resetLocalLength
   where
     skip = advance1 >> skipWhitespace
@@ -163,12 +175,12 @@ advance1 = do
            absolutePosition = ap,
            localLength = ll
          } ->
-          let advancedInput = tail inp
+          let advancedInput = T.tail inp
               advancedAbsolutePosition = ap + 1
               advancedLocalLength = ll + 1
            in case inp of
-                "" -> lexerState
-                ('\n' : _) ->
+                Empty -> lexerState
+                '\n' :> _ ->
                   lexerState
                     { input = advancedInput,
                       lineNumber = ln + 1,
@@ -198,7 +210,7 @@ accumulateTokens = do
     EOF _ _ -> pure [token]
     _ -> (token :) <$> accumulateTokens
 
-initLexerState :: String -> LexerState
+initLexerState :: T.Text -> LexerState
 initLexerState inp =
   LexerState
     { input = inp,
@@ -217,5 +229,5 @@ makeToken constructor = do
   resetLocalLength
   pure $ constructor (ap - ll) ap
 
-runLexer :: String -> Either LexicalError [Token]
+runLexer :: T.Text -> Either LexicalError [Token]
 runLexer = evalState (runExceptT accumulateTokens) . initLexerState
