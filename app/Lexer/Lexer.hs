@@ -37,8 +37,6 @@ instance Show LexicalError where
 
 type Lexer = ExceptT LexicalError (State LexerState)
 
--- TODO: Data.Text
-
 nextToken :: Lexer Token
 nextToken = do
   skipWhitespace
