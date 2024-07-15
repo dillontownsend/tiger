@@ -42,11 +42,13 @@ instance Show LexicalError where
 
 type Lexer = ExceptT LexicalError (State LexerState)
 
+pattern Empty :: T.Text
+pattern Empty <- (T.uncons -> Nothing)
+
 pattern (:>) :: Char -> T.Text -> T.Text
 pattern c :> t <- (T.uncons -> Just (c, t))
 
-pattern Empty :: T.Text
-pattern Empty <- (T.uncons -> Nothing)
+{-# COMPLETE Empty, (:>) #-}
 
 readT :: (Read a) => T.Text -> a
 readT = read . T.unpack
