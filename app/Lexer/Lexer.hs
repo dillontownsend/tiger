@@ -15,11 +15,11 @@ type ColumnNumber = Int
 type LocalLength = Int
 
 data LexerState = LexerState
-  { input :: String,
-    lineNumber :: LineNumber,
-    columnNumber :: ColumnNumber,
-    absolutePosition :: AbsolutePosition,
-    localLength :: LocalLength
+  { input :: !String,
+    lineNumber :: !LineNumber,
+    columnNumber :: !ColumnNumber,
+    absolutePosition :: !AbsolutePosition,
+    localLength :: !LocalLength
   }
 
 data LexicalError
